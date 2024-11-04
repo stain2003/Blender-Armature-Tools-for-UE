@@ -27,7 +27,7 @@ You will see a new panel "UE Renamer" in the context bar.
   Which side of the bone you are renaming if it has mirror bone, e.g. hand_l and hand_r
 
 
-**Rename select bone:**
+**Rename selected bone:**
 
   Enter edit mode, you have three ways to rename bones:
   1. if you are renaming a single bone, not chain, select it and hit button
