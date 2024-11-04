@@ -1,33 +1,33 @@
 # Blender-Armature-Tools-for-UE
 A simple tool can help you rename bones, generate ik bones and reparent them to match UE typical skeleton, which allows you to use the new auto retarget feature
 
-#Usage:
+Usage:
 Open the file via blender text editor, hit run the script.
 You will see a new panel "UE Renamer" in the context bar.
 
 
-#Armature:
+**Armature:**
 
   Select the target armature you are renaming
 
 
-#Bones to rename:
+**Bones to rename:**
 
   Chose which bone/bone chain you are renaming
 
 
-#With metacarpal:
+**With metacarpal:**
 
   Is the current armature has metacarpal for fingers?
   auto: auto detect
 
 
-#Side:
+**Side:**
 
   Which side of the bone you are renaming if it has mirror bone, e.g. hand_l and hand_r
 
 
-#Rename select bone:
+**Rename select bone:**
 
   Enter edit mode, you have three ways to rename bones:
   1. if you are renaming a single bone, not chain, select it and hit button
@@ -35,12 +35,12 @@ You will see a new panel "UE Renamer" in the context bar.
   3. if you are renaming a chain, select the whole chain, e.g. select bone from clavicle to hand(there should be 4 bones) to rename arm_chain
 
 
-#Generate ik bones:
+**Generate ik bones:**
 
   Generate ik bones.
 
 
-#Reparent ue bones:
+**Reparent ue bones:**
 
   Require rename the bones first.
   Helpful if your bones are not connected or not the way as they should, 
