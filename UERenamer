@@ -1,0 +1,476 @@
+bl_info = {
+    "name": "UE Renamer",
+    "blender": (2, 80, 0),
+    "category": "Object",
+}
+
+import bpy
+
+class Renamer_main(bpy.types.Operator):
+    bl_idname = "object.ue_renamer"
+    bl_label = "UE Renamer"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    bone_dict = {
+        'pelvis':['pelvis'],
+        'spine3':['spine_01', 'spine_03', 'spine_05'],
+        'spine4':['spine_01', 'spine_02', 'spine_03', 'spine_05'],
+        'spine5':['spine_01', 'spine_02', 'spine_03', 'spine_04', 'spine_05'],
+        'spine6':['spine_01', 'spine_02', 'spine_03', 'spine_04', 'spine_04s', 'spine_05'],
+        'neck': ['neck'],
+        'head': ['head'],
+        'thumb': ['thumb_01', 'thumb_02', 'thumb_03'],
+        'index': ['index_metacarpal', 'index_01', 'index_02', 'index_03'],
+        'middle': ['middle_metacarpal', 'middle_01', 'middle_02', 'middle_03'],
+        'ring': ['ring_metacarpal', 'ring_01', 'ring_02', 'ring_03'],
+        'pinky': ['pinky_metacarpal', 'pinky_01', 'pinky_02', 'pinky_03'],
+        'arm': ['clavicle', 'upperarm', 'lowerarm', 'hand'],
+        'leg': ['thigh', 'calf', 'foot', 'ball']
+    }
+    
+    def execute(self, context):
+        selection = context.scene.ue_renamer_selection
+        targetside = context.scene.select_side
+        include_metacarpal = context.scene.ue_renamer_with_metacarpal
+        selected_bones = bpy.context.selected_editable_bones
+        
+        if selected_bones:
+            names = self.bone_dict[selection]
+            if names is None:
+                self.report({'WARNING'}, "Invalid selection!")
+                return {'CANCELLED'}
+            
+            index = 0
+            curbone = selected_bones[0]
+            bonenum = len(selected_bones)
+            
+            #decide which side is renaming
+            side = ''
+            if targetside == 'right':
+                side = '_r'
+            elif targetside == 'left':
+                side = '_l'
+            
+            #when in auto carpal mode, check if current finger num less than target renamer chain,
+            #if yes then there should not be no carpal to rename
+            bskipcarpal = False
+            
+            while curbone and index < len(names):
+                new_name = names[index]
+                #adding side affix
+                if targetside != 'none':
+                    new_name = f"{new_name}{side}"
+                
+                #skip names of metacarpal
+                #if not include_metacarpal and "metacarpal" in new_name:
+                if include_metacarpal == 'auto' and len(curbone.children) + 1 < len(names):
+                    bskipcarpal = True
+                
+                if include_metacarpal == 'no':
+                    bskipcarpal = True
+                    
+                if bskipcarpal == True and "metacarpal" in new_name:
+                    self.report({'WARNING'}, "Metacarpal skipped!")
+                    index += 1
+                    continue
+
+                old_name = curbone.name
+                curbone.name = new_name
+                index += 1
+                
+                self.report({'INFO'}, f"Bone rename from '{old_name}' to '{new_name}'!")
+                
+                if bonenum > 1 and index<bonenum:
+                    curbone = selected_bones[index]
+                elif bonenum > 1:
+                    break
+                elif curbone.children:
+                    curbone = curbone.children[0]
+                else:
+                    break
+        else:
+            self.report({'WARNING'}, "No Bone selected!")
+            
+        return {'FINISHED'}
+    
+    def checkbone(self, armature, bonename):
+        bone = armature.data.edit_bones.get(bonename)
+        if bone:
+            return True
+        else:
+            self.report({'WARNING'}, f"Cannot find {bonename} in {armature.name}!")
+            return False
+
+
+
+
+
+class Generate_IK_Root(bpy.types.Operator):
+    bl_idname = "object.generate_ik_root"
+    bl_label = "Generate IK Root"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    
+    def execute(self, context):
+        
+        armature_name = context.scene.ue_renamer_armature
+        armature = bpy.data.objects.get(armature_name)
+        armature = bpy.context.active_object
+        
+        if armature.mode != 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
+       
+        #Initialize root bone
+        if armature.data.edit_bones.get('root') is None:
+            bpy.ops.armature.bone_primitive_add(name='root')
+            
+        rootbone = armature.data.edit_bones.get('root')
+        
+        if rootbone:
+            self.report({'INFO'}, f"found {rootbone.name} in: {armature.name} !")
+        else:
+            self.report({'ERROR'}, f"no root bone found in: {armature.name} !")
+            
+        rootbone.head[2] = 0
+        rootbone.head[1] = 0
+        rootbone.head[0] = 0
+        rootbone.tail[2] = 0
+        rootbone.tail[1] = -0.15
+        rootbone.tail[0] = 0
+        
+        #adding ik root bones
+        ik_foot_root = self.DuplicateBone(armature, "root", "ik_foot_root")
+        ik_hand_root = self.DuplicateBone(armature, "root", "ik_hand_root")
+        ik_foot_l = self.DuplicateBone(armature, "foot_l", "ik_foot_l")
+        ik_foot_r = self.DuplicateBone(armature, "foot_r", "ik_foot_r")
+        ik_hand_gun = self.DuplicateBone(armature, "hand_r", "ik_hand_gun")
+        ik_hand_l = self.DuplicateBone(armature, "hand_l", "ik_hand_l")
+        ik_hand_r = self.DuplicateBone(armature, "hand_r", "ik_hand_r")
+        
+        self.ReparentIKBones(ik_foot_root, ik_hand_root, ik_foot_l, ik_foot_r, ik_hand_gun, ik_hand_l, ik_hand_r)
+        
+        #rootbone.select = True
+        #armature.data.edit_bones.active = rootbone
+        
+        armature.data.edit_bones.remove(rootbone)
+        
+        return {'FINISHED'}
+
+    def DuplicateBone(self, armature, sourcename, bonename):
+        
+        #find source bone with given name
+        sourcebone = armature.data.edit_bones.get(sourcename)
+        if not sourcebone:
+            self.report({'ERROR'}, f"no source bone {sourcename} found!")
+        
+        #if bone to create is not exist: do; else: report 
+        if armature.data.edit_bones.get(bonename) is None:
+            bpy.ops.armature.bone_primitive_add(name=bonename)
+        else:
+            self.report({'WARNING'}, f"armature already has {bonename}!")
+        
+        newbone = armature.data.edit_bones.get(bonename)
+
+        #final check
+        if not newbone:
+            self.report({'ERROR'}, f"create {bonename} failed!")
+            
+        #copy source bone transform to new bone
+        newbone.head = sourcebone.head.copy()
+        newbone.tail = sourcebone.tail.copy()
+        newbone.roll = sourcebone.roll
+            
+        return newbone
+    
+    def ReparentIKBones(self,ik_foot_root, ik_hand_root, ik_foot_l, ik_foot_r, ik_hand_gun, ik_hand_l, ik_hand_r):
+            
+        if ik_foot_root and ik_hand_root and ik_foot_l and ik_foot_r and ik_hand_gun and ik_hand_l and ik_foot_r:
+            ik_foot_l.parent = ik_foot_root
+            ik_foot_r.parent = ik_foot_root
+            ik_hand_gun.parent = ik_hand_root
+            ik_hand_l.parent = ik_hand_gun
+            ik_hand_r.parent = ik_hand_gun
+        else:
+            if ik_foot_root is None:
+                missingbone = "ik_foot_root" 
+            elif ik_hand_root is None:
+                missingbone = "ik_hand_root" 
+            elif ik_foot_l is None:
+                missingbone = "ik_foot_l" 
+            elif ik_foot_r is None:
+                missingbone = "ik_foot_r" 
+            elif ik_hand_gun is None:
+                missingbone = "ik_hand_gun"
+            elif ik_hand_l is None:
+                missingbone = "ik_hand_l"
+            elif ik_hand_r is None:
+                missingbone = "ik_hand_r"
+                
+            self.report({'WARNING'}, f"missing {missingbone}")
+            
+        return {'FINISHED'}
+    
+    
+    
+class Reparent_Bones(bpy.types.Operator):
+    bl_idname = "object.rename_ik_bones"
+    bl_label = "Reparent UE bones"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        armature_name = context.scene.ue_renamer_armature
+        armature = bpy.data.objects.get(armature_name)
+        armature = bpy.context.active_object
+        
+        if armature.mode != 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
+            
+        dict = Renamer_main.bone_dict
+        armchain_l = [elem + '_l' for elem in dict['arm']]
+        armchain_r = [elem + '_r' for elem in dict['arm']]
+        legchian_l = [elem + '_l' for elem in dict['leg']]
+        legchian_r = [elem + '_r' for elem in dict['leg']]
+        thumbchain_l = [elem + '_l' for elem in dict['thumb']]
+        indexchain_l = [elem + '_l' for elem in dict['index']]
+        middlechain_l = [elem + '_l' for elem in dict['middle']]
+        ringchain_l = [elem + '_l' for elem in dict['ring']]
+        pinkychain_l = [elem + '_l' for elem in dict['pinky']]
+        thumbchain_r = [elem + '_r' for elem in dict['thumb']]
+        indexchain_r = [elem + '_r' for elem in dict['index']]
+        middlechain_r = [elem + '_r' for elem in dict['middle']]
+        ringchain_r = [elem + '_r' for elem in dict['ring']]
+        pinkychain_r = [elem + '_r' for elem in dict['pinky']]
+        
+        
+        #spine
+        armature.data.edit_bones.get("pelvis").parent = None
+        self.ParentBone(armature, "spine_01", "pelvis")
+        self.ParentBone(armature, "neck", "spine_05")
+        self.ParentBone(armature, "clavicle_l", "spine_05")
+        self.ParentBone(armature, "clavicle_r", "spine_05")
+        self.ParentBone(armature, "thigh_l", "pelvis")
+        self.ParentBone(armature, "thigh_r", "pelvis")
+        
+        
+        
+        #hand_l
+        self.ParentBone(armature, "thumb_01_l", "hand_l")
+        self.ParentBone(armature, "index_metacarpal_l", "hand_l")
+        if Renamer_main.checkbone(self, armature, "index_metacarpal_l") is False:
+            self.ParentBone(armature, "index_01_l", "hand_l")
+            
+        self.ParentBone(armature, "middle_metacarpal_l", "hand_l")
+        if Renamer_main.checkbone(self, armature, "middle_metacarpal_l") is False:
+            self.ParentBone(armature, "middle_01_l", "hand_l")
+            
+        self.ParentBone(armature, "ring_metacarpal_l", "hand_l")
+        if Renamer_main.checkbone(self, armature, "ring_metacarpal_l") is False:
+            self.ParentBone(armature, "ring_01_l", "hand_l")
+            
+        self.ParentBone(armature, "pinky_metacarpal_l", "hand_l")
+        if Renamer_main.checkbone(self, armature, "pinky_metacarpal_l") is False:
+            self.ParentBone(armature, "pinky_01_l", "hand_l")
+            
+            
+        #hand_r
+        self.ParentBone(armature, "thumb_01_r", "hand_r")
+        self.ParentBone(armature, "index_metacarpal_r", "hand_r")
+        if Renamer_main.checkbone(self, armature, "index_metacarpal_r") is False:
+            self.ParentBone(armature, "index_01_r", "hand_r")
+            
+        self.ParentBone(armature, "middle_metacarpal_r", "hand_r")
+        if Renamer_main.checkbone(self, armature, "middle_metacarpal_r") is False:
+            self.ParentBone(armature, "middle_01_r", "hand_r")
+            
+        self.ParentBone(armature, "ring_metacarpal_r", "hand_r")
+        if Renamer_main.checkbone(self, armature, "ring_metacarpal_r") is False:
+            self.ParentBone(armature, "ring_01_r", "hand_r")
+            
+        self.ParentBone(armature, "pinky_metacarpal_r", "hand_r")
+        if Renamer_main.checkbone(self, armature, "pinky_metacarpal_r") is False:
+            self.ParentBone(armature, "pinky_01_r", "hand_r")
+        
+        #arm and leg
+        self.ReparentBoneChain(armature, armchain_l)
+        self.ReparentBoneChain(armature, armchain_r)
+        self.ReparentBoneChain(armature, legchian_l)
+        self.ReparentBoneChain(armature, legchian_r)
+        
+        #fingers_l
+        self.ReparentBoneChain(armature, thumbchain_l)
+        self.ReparentBoneChain(armature, indexchain_l)
+        self.ReparentBoneChain(armature, middlechain_l)
+        self.ReparentBoneChain(armature, ringchain_l)
+        self.ReparentBoneChain(armature, pinkychain_l)
+        
+        #fingers_r
+        self.ReparentBoneChain(armature, thumbchain_r)
+        self.ReparentBoneChain(armature, indexchain_r)
+        self.ReparentBoneChain(armature, middlechain_r)
+        self.ReparentBoneChain(armature, ringchain_r)
+        self.ReparentBoneChain(armature, pinkychain_r)
+        
+        return {'FINISHED'}
+
+    def ParentBone(self, armature, Childname, Parentname):
+        
+        Child_Bone = armature.data.edit_bones.get(Childname)
+        Parent_Bone = armature.data.edit_bones.get(Parentname)
+        
+        if Child_Bone and Parent_Bone:
+            Child_Bone.parent = Parent_Bone
+            self.report({'INFO'}, f"Parenting {Childname} to {Parentname}")
+        elif Child_Bone is None:
+            self.report({'WARNING'}, f"Parenting: missing {Childname}")
+        elif Parent_Bone is None:
+            self.report({'WARNING'}, f"Parenting: missing {Parentname}")
+    
+    def ReparentBoneChain(self, armature, chain):
+        
+        #reparent bone chain
+        for i in range(len(chain) - 1):
+            child_bone = armature.data.edit_bones.get(chain[i+1])
+            parent_bone = armature.data.edit_bones.get(chain[i])
+            
+            if child_bone and parent_bone:
+                childname = child_bone.name
+                parentname = parent_bone.name
+                self.ParentBone(armature, childname, parentname)
+            elif child_bone is None:
+                self.report({'WARNING'}, f"Chain: missing {chain[i+1]}")
+            elif parent_bone is None:
+                self.report({'WARNING'}, f"Chain: missing {chain[i]}")
+        
+        return {'FINISHED'}
+
+    
+class UE_Renamer_panel(bpy.types.Panel):
+    bl_label = "Select an Option"
+    bl_idname = "UE_Renamer_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Tools"
+
+    def draw(self, context):
+        layout = self.layout
+        
+        row = layout.row()
+        row.prop(context.scene, "ue_renamer_armature", text="Armature")
+        
+        row = layout.row()
+        row.prop(context.scene, "ue_renamer_selection", text="Bones to rename")
+        
+        # add 
+        row = layout.row()
+        row.prop(context.scene, "ue_renamer_with_metacarpal", text="With Metacarpal")
+        
+        # add side selection
+        rouw = row.row()
+        row.prop(context.scene, "select_side", text="Side")
+        
+        # 添加重命名按钮
+        row = layout.row()
+        row.operator(Renamer_main.bl_idname, text="Rename Selected Bone")
+
+        # Generate IK bones
+        row = layout.row()
+        row.operator(Generate_IK_Root.bl_idname, text="Generate IK bones")
+        
+        # Reparent UE bones
+        row = layout.row()
+        row.operator(Reparent_Bones.bl_idname, text="Reparent UE bones")
+        
+    
+      
+class OBJECT_MT_context_menu(bpy.types.Menu):
+    bl_label = "Context Menu"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator(Renamer_main.bl_idname)
+
+def update_armature_items(self, context):
+    # 获取所有 Armature 对象
+    armature_items = []
+    for obj in bpy.data.objects:
+        if obj.type == 'ARMATURE':
+            armature_items.append((obj.name, obj.name, ""))  # (identifier, name, description)
+    
+    return armature_items
+
+
+def register():
+    bpy.utils.register_class(Renamer_main)
+    bpy.utils.register_class(UE_Renamer_panel)
+    bpy.utils.register_class(OBJECT_MT_context_menu)
+    bpy.utils.register_class(Generate_IK_Root)
+    bpy.utils.register_class(Reparent_Bones)
+    
+    
+    # 定义 EnumProperty
+    bpy.types.Scene.ue_renamer_armature = bpy.props.EnumProperty(
+        name="Select target armature",
+        items=update_armature_items
+    )
+
+    #Bone chain to rename
+    bpy.types.Scene.ue_renamer_selection = bpy.props.EnumProperty(
+        name="Bones to rename",
+        items=[
+            ('pelvis', 'pelvis', ""),
+            ('spine3', "spine 3 bones", ""),
+            ('spine4', "spine 4 bones", ""),
+            ('spine5', "spine 5 bones", ""),
+            ('spine6', "spine 6 bones", ""),
+            ('neck', "neck", ""),
+            ('head', "head", ""),
+            ('leg', "leg", ""),
+            ('arm', "arm", ""),
+            ('thumb', "thumb", ""),
+            ('index', "index", ""),
+            ('middle', "middle", ""),
+            ('ring', "ring", ""),
+            ('pinky', "pinky", ""),
+        ],
+        default='pelvis'
+    )
+    
+    #Renaming finger with metacarpal or?
+    bpy.types.Scene.ue_renamer_with_metacarpal = bpy.props.EnumProperty(
+        name="With Metacarpal",
+        items=[
+            ('auto', 'auto', ""),
+            ('yes', 'yes', ""),
+            ('no', 'no', "")
+        ],
+        default='auto'
+    )
+
+    
+    #Select which side of the bone being renamed
+    bpy.types.Scene.select_side = bpy.props.EnumProperty(
+        name="Select side",
+        items=[
+            ('none', 'none', ""),
+            ('right', 'right', ""),
+            ('left', 'left', "")
+        ],
+        default='none'
+    )
+
+    bpy.types.VIEW3D_MT_object.append(lambda self, context: self.layout.menu(OBJECT_MT_context_menu.bl_idname))
+
+def unregister():
+    bpy.utils.unregister_class(Renamer_main)
+    bpy.utils.unregister_class(UE_Renamer_panel)
+    bpy.utils.unregister_class(OBJECT_MT_context_menu)
+    bpy.utils.register_class(Generate_IK_Root)
+    bpy.utils.register_class(Reparent_Bones)
+    
+    del bpy.types.Scene.ue_renamer_selection
+    del bpy.types.Scene.ue_renamer_with_metacarpal
+    del bpy.types.Scene.select_side
+    bpy.types.VIEW3D_MT_object.remove(lambda self, context: self.layout.menu(OBJECT_MT_context_menu.bl_idname))
+
+if __name__ == "__main__":
+    register()
