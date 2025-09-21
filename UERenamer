@@ -69,9 +69,15 @@ class Renamer_main(bpy.types.Operator):
                 if include_metacarpal == 'no':
                     bskipcarpal = True
                     
-                if bskipcarpal == True and "metacarpal" in new_name:
+                if bskipcarpal and "metacarpal" in new_name:
                     self.report({'WARNING'}, "Metacarpal skipped!")
                     index += 1
+                    if bonenum > 1 and index < bonenum:
+                        curbone = selected_bones[index]  # 同步推进
+                    elif curbone.children:
+                        curbone = curbone.children[0]
+                    else:
+                        break
                     continue
 
                 old_name = curbone.name
