@@ -86,11 +86,7 @@ class Renamer_main(bpy.types.Operator):
                 
                 self.report({'INFO'}, f"Bone rename from '{old_name}' to '{new_name}'!")
                 
-                if bonenum > 1 and index<bonenum:
-                    curbone = selected_bones[index]
-                elif bonenum > 1:
-                    break
-                elif curbone.children:
+                if curbone.children:
                     curbone = curbone.children[0]
                 else:
                     break
@@ -480,3 +476,4 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
